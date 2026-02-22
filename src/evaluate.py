@@ -390,12 +390,45 @@ def main(cfg: DictConfig):
         # Try to load from local files first
         metrics = load_local_metrics(results_dir, run_id)
         
+        # [VALIDATOR FIX - Attempt 4]
+        # [PROBLEM]: WandB SummarySubDict objects are not JSON serializable
+        # [CAUSE]: wandb_data["summary"] returns a SummarySubDict which is a dict-like object
+        #          but cannot be directly serialized to JSON
+        # [FIX]: Convert to plain dict using dict() constructor and filter out internal fields
+        #
+        # [OLD CODE]:
+        # if metrics is None:
+        #     # Try to fetch from WandB
+        #     print(f"  Attempting to fetch from WandB...")
+        #     wandb_data = fetch_wandb_run(wandb_entity, wandb_project, run_id)
+        #     if wandb_data:
+        #         metrics = wandb_data["summary"]
+        # 
+        # if metrics is None:
+        #     print(f"  Warning: Could not find metrics for {run_id}, skipping...")
+        #     continue
+        # 
+        # all_metrics[run_id] = metrics
+        # 
+        # # Export per-run metrics
+        # run_output_dir = results_dir / run_id
+        # run_output_dir.mkdir(parents=True, exist_ok=True)
+        # 
+        # metrics_file = run_output_dir / "metrics.json"
+        # with open(metrics_file, "w") as f:
+        #     json.dump(metrics, f, indent=2)
+        # print(f"  Exported metrics to: {metrics_file}")
+        #
+        # [NEW CODE]:
         if metrics is None:
             # Try to fetch from WandB
             print(f"  Attempting to fetch from WandB...")
             wandb_data = fetch_wandb_run(wandb_entity, wandb_project, run_id)
             if wandb_data:
-                metrics = wandb_data["summary"]
+                # Convert SummarySubDict to plain dict and filter out internal WandB fields
+                summary = wandb_data["summary"]
+                metrics = {k: v for k, v in dict(summary).items() 
+                          if not k.startswith("_")}  # Remove internal fields like _wandb, _runtime, etc.
         
         if metrics is None:
             print(f"  Warning: Could not find metrics for {run_id}, skipping...")
@@ -409,7 +442,9 @@ def main(cfg: DictConfig):
         
         metrics_file = run_output_dir / "metrics.json"
         with open(metrics_file, "w") as f:
-            json.dump(metrics, f, indent=2)
+            # Ensure metrics is JSON serializable by converting to plain dict
+            serializable_metrics = dict(metrics) if not isinstance(metrics, dict) else metrics
+            json.dump(serializable_metrics, f, indent=2)
         print(f"  Exported metrics to: {metrics_file}")
         
         # Create per-run plots
