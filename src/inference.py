@@ -45,29 +45,29 @@ def create_til_rv_prompt(question: str) -> str:
     Returns:
         Formatted prompt
     """
-    # [VALIDATOR FIX - Attempt 5]
-    # [PROBLEM]: 84.5% catastrophic error rate; model completely ignores TIL-RV format and uses "## Step" format instead
-    # [CAUSE]: 193/200 responses hit 257-token limit and 175/200 use "## Step" format despite prompt.
-    #          The complex TIL-RV format (CHECKS with 5 types, VERIFY with vectors) is too different
-    #          from model's training. Model defaults to familiar "## Step" CoT format and runs out of tokens.
-    # [FIX]: Simplify to a lightweight format the model can follow within 256 tokens:
-    #        - Minimal prompt overhead (~20 tokens vs ~80)
-    #        - Allow natural brief reasoning 
-    #        - Add clear "FINAL:" marker at end for reliable extraction
-    #        - Still maintains TIL-RV spirit (answer with verification marker)
-    #        - Saves ~60 tokens, giving model room to complete answer without truncation
+    # [VALIDATOR FIX - Attempt 6]
+    # [PROBLEM]: 28% catastrophic error rate; 195/200 use "## Step" format, 115/200 hit token limit, 97.6% of catastrophic errors from truncation
+    # [CAUSE]: Attempt 5's minimal prompt "Solve briefly, then write: FINAL: <answer>" is ignored by model.
+    #          Model strongly biased toward trained "## Step" CoT format. With 256 tokens, model writes
+    #          verbose steps, gets truncated mid-calculation, extraction grabs wrong intermediate number.
+    # [FIX]: Work WITH model's training instead of against it:
+    #        - Accept "## Step" format since model will use it anyway
+    #        - Add instruction to STATE ANSWER FIRST, then show work
+    #        - This ensures final answer appears early, before any truncation
+    #        - Format: "Answer: X\n\nWork:\n## Step 1:..." 
+    #        - Extraction prioritizes "Answer:" pattern which will be at top
+    #        - Even if truncated during "Work:" section, we already have the answer
     #
     # [OLD CODE]:
     # return f"""{question}
     # 
-    # Constraints on answer A: Must be >0, integer, reasonable estimate.
-    # Solve directly: A = ?
-    # FINAL: A = """
+    # Solve briefly, then write: FINAL: <answer>"""
     #
     # [NEW CODE]:
     return f"""{question}
 
-Solve briefly, then write: FINAL: <answer>"""
+State your final answer first, then show your work.
+Answer:"""
 
 
 def run_inference(cfg: DictConfig) -> Dict:

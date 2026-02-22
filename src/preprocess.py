@@ -98,23 +98,41 @@ def extract_final_answer_from_response(response: str) -> Optional[float]:
     Returns:
         Extracted numeric answer or None if not found
     """
-    # [VALIDATOR FIX - Attempt 2]
-    # [PROBLEM]: Answer extraction returns wrong numbers; model uses "## Step" format not TIL-RV format
-    # [CAUSE]: Model generates step-by-step CoT and gets truncated. Extraction needs to prioritize
-    #          explicit answer markers over intermediate calculation numbers.
-    # [FIX]: Reorder patterns to prioritize explicit answer markers first:
-    #        1. "The final answer is:" (new prompt format)
-    #        2. "FINAL:" and "####" (structured formats)
-    #        3. "The answer is" and similar explicit markers
-    #        4. Last number in response (only as final fallback)
-    #        This ensures we extract the intended final answer, not intermediate values.
+    # [VALIDATOR FIX - Attempt 3]
+    # [PROBLEM]: 28% catastrophic error rate due to answer extraction grabbing wrong intermediate numbers
+    # [CAUSE]: Prompt changed (Attempt 6) to "State your final answer first...\nAnswer:" to force answer
+    #          before reasoning. But extraction prioritizes other patterns first, missing the early "Answer:".
+    # [FIX]: Move "Answer:" pattern to HIGHEST priority since new prompt specifically requests this format
+    #        at the beginning. This ensures we extract the answer that appears first, before any work/steps.
+    #        Priority order:
+    #        1. "Answer:" pattern (matches Attempt 6 prompt format) - HIGHEST PRIORITY
+    #        2. Other explicit answer markers
+    #        3. Last number in response (only as final fallback)
     #
     # [OLD CODE]:
-    # (patterns checking intermediate calculation numbers before explicit answer markers)
+    # (patterns checking other formats before "Answer:")
     #
     # [NEW CODE]:
     
-    # Try "The final answer is:" pattern (new prompt format) - HIGHEST PRIORITY
+    # Try "Answer:" pattern FIRST (new prompt format from Attempt 6) - HIGHEST PRIORITY
+    # This matches "Answer: 123" or "answer: 123" at start of response
+    match = re.search(r"(?:^|\n)\s*(?:answer:)\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
+    if match:
+        return float(match.group(1).replace(",", ""))
+    
+    # Also try: model might just give number right after our prompt "Answer:" without repeating it
+    # Look for a number at the very start of the response (within first 50 chars)
+    first_part = response[:50].strip()
+    match = re.match(r"^\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", first_part)
+    if match:
+        return float(match.group(1).replace(",", ""))
+    
+    # Try "The answer is" pattern (also common)
+    match = re.search(r"(?:the answer is|answer is):\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
+    if match:
+        return float(match.group(1).replace(",", ""))
+    
+    # Try "The final answer is:" pattern
     match = re.search(r"(?:the final answer is|final answer is):\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
     if match:
         return float(match.group(1).replace(",", ""))
@@ -126,11 +144,6 @@ def extract_final_answer_from_response(response: str) -> Optional[float]:
     
     # Try #### pattern (GSM8K format)
     match = re.search(r"####\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response)
-    if match:
-        return float(match.group(1).replace(",", ""))
-    
-    # Try "The answer is" or "Answer:" pattern
-    match = re.search(r"(?:the answer is|answer is|answer:)\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
     if match:
         return float(match.group(1).replace(",", ""))
     
