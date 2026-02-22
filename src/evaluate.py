@@ -342,12 +342,34 @@ def main(cfg: DictConfig):
     # and the main config.yaml has run: ??? which is required and would fail
     results_dir = Path(cfg.get("results_dir", ".research/results"))
     
-    # run_ids can be a string (JSON) or a list
+    # [VALIDATOR FIX - Attempt 3]
+    # [PROBLEM]: run_ids validation fails when Hydra passes a ListConfig object
+    # [CAUSE]: isinstance check only checks for list/tuple, but Hydra CLI args like 
+    #          run_ids='["a","b"]' are parsed as omegaconf.ListConfig objects
+    # [FIX]: Use OmegaConf.to_container() to convert any OmegaConf type to primitive Python types
+    #
+    # [OLD CODE]:
+    # run_ids_raw = cfg.get("run_ids")
+    # if isinstance(run_ids_raw, str):
+    #     run_ids = json.loads(run_ids_raw)
+    # elif isinstance(run_ids_raw, (list, tuple)):
+    #     run_ids = list(run_ids_raw)
+    # else:
+    #     raise ValueError(f"run_ids must be a JSON string or list, got: {type(run_ids_raw)}")
+    #
+    # [NEW CODE]:
     run_ids_raw = cfg.get("run_ids")
     if isinstance(run_ids_raw, str):
+        # Parse JSON string
         run_ids = json.loads(run_ids_raw)
-    elif isinstance(run_ids_raw, (list, tuple)):
-        run_ids = list(run_ids_raw)
+    elif run_ids_raw is not None:
+        # Convert OmegaConf containers (ListConfig, DictConfig) or Python list/tuple to list
+        # OmegaConf.to_container returns primitive Python types
+        try:
+            run_ids = OmegaConf.to_container(run_ids_raw, resolve=True)
+        except:
+            # Fallback for plain Python types
+            run_ids = list(run_ids_raw)
     else:
         raise ValueError(f"run_ids must be a JSON string or list, got: {type(run_ids_raw)}")
     
