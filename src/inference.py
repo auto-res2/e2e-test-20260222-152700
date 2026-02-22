@@ -45,30 +45,72 @@ def create_til_rv_prompt(question: str) -> str:
     Returns:
         Formatted prompt
     """
-    return f"""You are solving a math word problem using Typed Invariant Ledger with Residual-only Verification.
+    # [VALIDATOR FIX - Attempt 2]
+    # [PROBLEM]: 60% catastrophic error rate; responses truncated at 401 tokens before completing FINAL answer
+    # [CAUSE]: Original prompt was too verbose, causing the model to generate long explanations, Python code, and 
+    #          unnecessary text. The structured TIL-RV format (LEDGER + SOLVE + VERIFY + PATCH + FINAL) couldn't 
+    #          fit in the token budget with all the extra verbosity.
+    # [FIX]: Rewrote prompt to be extremely concise and directive:
+    #        - Removed verbose instructions and explanations
+    #        - Added explicit "BE CONCISE" directive
+    #        - Simplified format specifications
+    #        - Added "No explanations" constraint
+    #        - Emphasized importance of completing FINAL answer
+    #
+    # [OLD CODE]:
+    # return f"""You are solving a math word problem using Typed Invariant Ledger with Residual-only Verification.
+    # 
+    # Problem: {question}
+    # 
+    # Instructions:
+    # 1. LEDGER: Define exactly 5 invariants (constraints), one for each type:
+    #    - BOUND: upper/lower bounds on answer A
+    #    - SIGN_MONOTONE: sign or direction constraints
+    #    - DISCRETE: integer/parity/divisibility constraints  
+    #    - CONSERVATION: sum/total preservation
+    #    - SANITY: order-of-magnitude estimate
+    #    
+    #    Format each as: TYPE: <description> | CHECK: <constraint using only A and constants>
+    # 
+    # 2. SOLVE: Work through the problem step by step and state candidate answer A.
+    # 
+    # 3. VERIFY: For each invariant, compute the residual and mark PASS/FAIL.
+    #    Format: PASSVEC: [bit1, bit2, bit3, bit4, bit5]
+    # 
+    # 4. PATCH: If any invariant failed, apply ONE minimal correction.
+    # 
+    # 5. FINAL: State your final numeric answer as "FINAL: <number>"
+    # 
+    # Solution:"""
+    #
+    # [NEW CODE]:
+    return f"""Solve this math problem. BE CONCISE. No explanations, examples, or code.
 
 Problem: {question}
 
-Instructions:
-1. LEDGER: Define exactly 5 invariants (constraints), one for each type:
-   - BOUND: upper/lower bounds on answer A
-   - SIGN_MONOTONE: sign or direction constraints
-   - DISCRETE: integer/parity/divisibility constraints  
-   - CONSERVATION: sum/total preservation
-   - SANITY: order-of-magnitude estimate
-   
-   Format each as: TYPE: <description> | CHECK: <constraint using only A and constants>
+Required format:
 
-2. SOLVE: Work through the problem step by step and state candidate answer A.
+LEDGER (5 invariants, one line each):
+1. BOUND: <brief> | CHECK: <expr with A>
+2. SIGN_MONOTONE: <brief> | CHECK: <expr with A>
+3. DISCRETE: <brief> | CHECK: <expr with A>
+4. CONSERVATION: <brief> | CHECK: <expr with A>
+5. SANITY: <brief> | CHECK: <expr with A>
 
-3. VERIFY: For each invariant, compute the residual and mark PASS/FAIL.
-   Format: PASSVEC: [bit1, bit2, bit3, bit4, bit5]
+SOLVE:
+<concise calculation>
+Candidate A = <number>
 
-4. PATCH: If any invariant failed, apply ONE minimal correction.
+VERIFY:
+<check each invariant: PASS or FAIL>
+PASSVEC: [bit1, bit2, bit3, bit4, bit5]
 
-5. FINAL: State your final numeric answer as "FINAL: <number>"
+PATCH (if needed):
+<brief correction>
 
-Solution:"""
+FINAL: <number>
+
+Begin:"""
 
 
 def run_inference(cfg: DictConfig) -> Dict:

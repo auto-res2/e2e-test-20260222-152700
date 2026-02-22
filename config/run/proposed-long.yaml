@@ -18,7 +18,16 @@ model:
   # [OLD CODE]:
   # max_new_tokens: 320
   #
-  # [NEW CODE]:
+  # [NEW CODE (Attempt 1)]:
+  # max_new_tokens: 400
+  
+  # [VALIDATOR FIX - Attempt 2]
+  # [PROBLEM]: Still hitting token limit at 401 tokens; 60% catastrophic error rate
+  # [CAUSE]: Despite 400 tokens, responses still truncated because original verbose prompt caused long outputs
+  # [FIX]: Combined with concise prompt rewrite (Attempt 2 in inference.py), keep 400 tokens as upper bound
+  #        but new prompt should use ~250-300 tokens typically, leaving buffer for complex problems
+  #
+  # [NEW CODE (Attempt 2)]:
   max_new_tokens: 400
   
 dataset:
