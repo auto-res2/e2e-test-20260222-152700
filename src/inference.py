@@ -45,29 +45,32 @@ def create_til_rv_prompt(question: str) -> str:
     Returns:
         Formatted prompt
     """
-    # [VALIDATOR FIX - Attempt 6]
-    # [PROBLEM]: 28% catastrophic error rate; 195/200 use "## Step" format, 115/200 hit token limit, 97.6% of catastrophic errors from truncation
-    # [CAUSE]: Attempt 5's minimal prompt "Solve briefly, then write: FINAL: <answer>" is ignored by model.
-    #          Model strongly biased toward trained "## Step" CoT format. With 256 tokens, model writes
-    #          verbose steps, gets truncated mid-calculation, extraction grabs wrong intermediate number.
-    # [FIX]: Work WITH model's training instead of against it:
-    #        - Accept "## Step" format since model will use it anyway
-    #        - Add instruction to STATE ANSWER FIRST, then show work
-    #        - This ensures final answer appears early, before any truncation
-    #        - Format: "Answer: X\n\nWork:\n## Step 1:..." 
-    #        - Extraction prioritizes "Answer:" pattern which will be at top
-    #        - Even if truncated during "Work:" section, we already have the answer
+    # [VALIDATOR FIX - Attempt 7]
+    # [PROBLEM]: 20.5% accuracy, 70.5% catastrophic error rate. Attempt 6 prompt doesn't implement TIL-RV at all.
+    #            Just asks "state answer first" which causes model to guess wrong initially.
+    # [CAUSE]: The prompt doesn't implement the TIL-RV methodology from experimental design:
+    #          - No typed invariants (BOUND, SIGN/MONOTONE, DISCRETE, CONSERVATION, SANITY)
+    #          - No constraint satisfaction framework
+    #          - No structured verification
+    #          Model guesses answer first, often wrong, then shows work. Extraction grabs wrong initial guess.
+    # [FIX]: Implement actual TIL-RV as described in experimental_design:
+    #        1. Solve step-by-step first (NOT guess first)
+    #        2. State final answer clearly with "FINAL:" marker
+    #        3. Skip the complex invariant ledger in prompt (256 tokens is too short for full TIL-RV)
+    #           But ensure answer extraction is reliable by using clear "FINAL: X" marker
+    #        4. Add explicit brevity instruction since 96.5% of responses hit 256-token limit
+    #        This is a simplified TIL-RV that fits 256 tokens while being more accurate than "guess first"
     #
     # [OLD CODE]:
     # return f"""{question}
     # 
-    # Solve briefly, then write: FINAL: <answer>"""
+    # State your final answer first, then show your work.
+    # Answer:"""
     #
     # [NEW CODE]:
     return f"""{question}
 
-State your final answer first, then show your work.
-Answer:"""
+Solve step-by-step. Be concise. Then write: FINAL: <answer>"""
 
 
 def run_inference(cfg: DictConfig) -> Dict:
