@@ -1,0 +1,32 @@
+# Proposed: TIL-RV (Typed Invariant Ledger + Residual-only Verification) - Long token budget
+run_id: proposed-long
+
+method:
+  type: proposed
+  name: TIL-RV
+  description: "Typed Invariant Ledger + Residual-only Verification: constraint satisfaction with typed diversity-constrained invariants and residual-only verification"
+  
+model:
+  name: meta-llama/Llama-3.1-8B-Instruct
+  temperature: 0.0
+  max_new_tokens: 320
+  
+dataset:
+  name: gsm8k
+  split: test
+  num_samples: 200
+  
+inference:
+  task_type: math_reasoning
+  prompt_strategy: til_rv
+  greedy_decoding: true
+  typed_invariants:
+    enabled: true
+    required_types: [BOUND, SIGN_MONOTONE, DISCRETE, CONSERVATION, SANITY]
+    enforce_diversity: true
+  residual_verification:
+    enabled: true
+    single_patch_only: true
+  
+wandb:
+  tags: [proposed, til-rv, long-budget, math-reasoning]

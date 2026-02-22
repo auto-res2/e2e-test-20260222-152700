@@ -1,0 +1,26 @@
+# Baseline: ILBV (Invariant Ledger + Baseline Verify/patch) - Long token budget
+run_id: comparative-0-long
+
+method:
+  type: comparative
+  index: 0
+  name: ILBV
+  description: "Invariant Ledger + Baseline Verify/patch: free-form invariant ledger with verify/patch mechanism"
+  
+model:
+  name: meta-llama/Llama-3.1-8B-Instruct
+  temperature: 0.0
+  max_new_tokens: 320
+  
+dataset:
+  name: gsm8k
+  split: test
+  num_samples: 200
+  
+inference:
+  task_type: math_reasoning
+  prompt_strategy: ilbv
+  greedy_decoding: true
+  
+wandb:
+  tags: [baseline, ilbv, long-budget, math-reasoning]
