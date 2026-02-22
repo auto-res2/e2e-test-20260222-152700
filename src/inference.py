@@ -45,50 +45,50 @@ def create_til_rv_prompt(question: str) -> str:
     Returns:
         Formatted prompt
     """
-    # [VALIDATOR FIX - Attempt 2]
-    # [PROBLEM]: 60% catastrophic error rate; responses truncated at 401 tokens before completing FINAL answer
-    # [CAUSE]: Original prompt was too verbose, causing the model to generate long explanations, Python code, and 
-    #          unnecessary text. The structured TIL-RV format (LEDGER + SOLVE + VERIFY + PATCH + FINAL) couldn't 
-    #          fit in the token budget with all the extra verbosity.
-    # [FIX]: Rewrote prompt to be extremely concise and directive:
-    #        - Removed verbose instructions and explanations
-    #        - Added explicit "BE CONCISE" directive
-    #        - Simplified format specifications
-    #        - Added "No explanations" constraint
-    #        - Emphasized importance of completing FINAL answer
+    # [VALIDATOR FIX - Attempt 3]
+    # [PROBLEM]: 68.5% catastrophic error rate; responses cut off at 257 tokens with Python code/explanations after FINAL
+    # [CAUSE]: Model still generates code blocks (```python...```) and long explanations after FINAL despite instructions.
+    #          The Llama instruction-tuned model is trained to be helpful with code examples, overriding brief prompts.
+    # [FIX]: Made prompt even more forceful with explicit prohibitions and end-of-response marker:
+    #        - Added "STOP after FINAL" instruction  
+    #        - Changed "No explanations, examples, or code" to "DO NOT write code, explanations, or examples"
+    #        - Added "Only output the required format" 
+    #        - Emphasized stopping immediately: "Output ONLY the above format and STOP"
+    #        - Combined with stop_sequences in generate() to truncate any extra output
     #
     # [OLD CODE]:
-    # return f"""You are solving a math word problem using Typed Invariant Ledger with Residual-only Verification.
+    # return f"""Solve this math problem. BE CONCISE. No explanations, examples, or code.
     # 
     # Problem: {question}
     # 
-    # Instructions:
-    # 1. LEDGER: Define exactly 5 invariants (constraints), one for each type:
-    #    - BOUND: upper/lower bounds on answer A
-    #    - SIGN_MONOTONE: sign or direction constraints
-    #    - DISCRETE: integer/parity/divisibility constraints  
-    #    - CONSERVATION: sum/total preservation
-    #    - SANITY: order-of-magnitude estimate
-    #    
-    #    Format each as: TYPE: <description> | CHECK: <constraint using only A and constants>
+    # Required format:
     # 
-    # 2. SOLVE: Work through the problem step by step and state candidate answer A.
+    # LEDGER (5 invariants, one line each):
+    # 1. BOUND: <brief> | CHECK: <expr with A>
+    # 2. SIGN_MONOTONE: <brief> | CHECK: <expr with A>
+    # 3. DISCRETE: <brief> | CHECK: <expr with A>
+    # 4. CONSERVATION: <brief> | CHECK: <expr with A>
+    # 5. SANITY: <brief> | CHECK: <expr with A>
     # 
-    # 3. VERIFY: For each invariant, compute the residual and mark PASS/FAIL.
-    #    Format: PASSVEC: [bit1, bit2, bit3, bit4, bit5]
+    # SOLVE:
+    # <concise calculation>
+    # Candidate A = <number>
     # 
-    # 4. PATCH: If any invariant failed, apply ONE minimal correction.
+    # VERIFY:
+    # <check each invariant: PASS or FAIL>
+    # PASSVEC: [bit1, bit2, bit3, bit4, bit5]
     # 
-    # 5. FINAL: State your final numeric answer as "FINAL: <number>"
+    # PATCH (if needed):
+    # <brief correction>
     # 
-    # Solution:"""
+    # FINAL: <number>
+    # 
+    # Begin:"""
     #
     # [NEW CODE]:
-    return f"""Solve this math problem. BE CONCISE. No explanations, examples, or code.
+    return f"""Solve: {question}
 
-Problem: {question}
-
-Required format:
+DO NOT write code, explanations, or examples. Output ONLY the format below and STOP immediately after FINAL.
 
 LEDGER (5 invariants, one line each):
 1. BOUND: <brief> | CHECK: <expr with A>
@@ -98,19 +98,17 @@ LEDGER (5 invariants, one line each):
 5. SANITY: <brief> | CHECK: <expr with A>
 
 SOLVE:
-<concise calculation>
 Candidate A = <number>
 
 VERIFY:
-<check each invariant: PASS or FAIL>
 PASSVEC: [bit1, bit2, bit3, bit4, bit5]
 
 PATCH (if needed):
-<brief correction>
+<correction>
 
 FINAL: <number>
 
-Begin:"""
+Answer:"""
 
 
 def run_inference(cfg: DictConfig) -> Dict:
@@ -178,12 +176,19 @@ def run_inference(cfg: DictConfig) -> Dict:
         else:
             raise ValueError(f"Unknown prompt strategy: {prompt_strategy}")
         
-        # Generate response
+        # Generate response with stop sequences for TIL-RV
+        stop_sequences = None
+        if prompt_strategy == "til_rv":
+            # Stop after FINAL: <number> to prevent code generation and extra text
+            # More specific patterns to avoid cutting off valid structured content
+            stop_sequences = ["```", "\n\nNote:", "\n\nOutput:", "\n\nThis code", "\n\nThe answer", "python\n"]
+        
         response = model.generate(
             prompt=prompt,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             do_sample=False,
+            stop_sequences=stop_sequences,
         )
         
         # Extract answer
