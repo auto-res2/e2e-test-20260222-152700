@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -302,9 +302,27 @@ def create_per_run_plots(
     return generated_files
 
 
+# [VALIDATOR FIX - Attempt 1]
+# [PROBLEM]: Hydra with config_path=None creates a struct-mode config that rejects CLI overrides like results_dir=... with error "Key 'results_dir' is not in struct"
+# [CAUSE]: When config_path=None, Hydra creates an empty DictConfig in struct mode by default, preventing new keys from being added via CLI
+# [FIX]: Import OmegaConf and use OmegaConf.set_struct(cfg, False) at the start of main() to allow dynamic key addition
+#
+# [OLD CODE]:
+# @hydra.main(version_base=None, config_path=None)
+# def main(cfg: DictConfig):
+#     """Main evaluation function."""
+#     # Extract parameters from config or use direct CLI overrides
+#     # Note: We don't use config_path="../config" because evaluate.py doesn't need the run config,
+#     # and the main config.yaml has run: ??? which is required and would fail
+#     results_dir = Path(cfg.get("results_dir", ".research/results"))
+#
+# [NEW CODE]:
 @hydra.main(version_base=None, config_path=None)
 def main(cfg: DictConfig):
     """Main evaluation function."""
+    # Disable struct mode to allow CLI overrides like results_dir=... and run_ids=...
+    OmegaConf.set_struct(cfg, False)
+    
     # Extract parameters from config or use direct CLI overrides
     # Note: We don't use config_path="../config" because evaluate.py doesn't need the run config,
     # and the main config.yaml has run: ??? which is required and would fail
