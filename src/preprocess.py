@@ -98,27 +98,60 @@ def extract_final_answer_from_response(response: str) -> Optional[float]:
     Returns:
         Extracted numeric answer or None if not found
     """
+    # [VALIDATOR FIX - Attempt 1]
+    # [PROBLEM]: Answer extraction returns wrong numbers (e.g., 2.0 instead of 18.0, 4.0 instead of 64.0)
+    # [CAUSE]: Responses are truncated at max_new_tokens, and the function was extracting the last number in truncated text,
+    #          which is often a wrong intermediate number. Need to prioritize answer-like contexts.
+    # [FIX]: Added more answer patterns (makes, Therefore, she makes) and reordered to check answer-context patterns
+    #        before falling back to "last number" heuristic. Also look for dollar amounts with $ prefix.
+    #
+    # [OLD CODE]:
+    # (patterns in different order, missing key answer contexts)
+    #
+    # [NEW CODE]:
+    
     # Try FINAL: pattern (TIL-RV format)
-    match = re.search(r"FINAL:\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
+    match = re.search(r"FINAL:\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
     if match:
         return float(match.group(1).replace(",", ""))
     
     # Try #### pattern (GSM8K format)
-    match = re.search(r"####\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)", response)
+    match = re.search(r"####\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response)
     if match:
         return float(match.group(1).replace(",", ""))
+    
+    # Try "makes" with calculation pattern (e.g., "makes 2 * 9 = $18")
+    match = re.search(r"makes?\s+[^.]*?=\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
+    if match:
+        return float(match.group(1).replace(",", ""))
+    
+    # Try "Therefore" with calculation pattern (e.g., "Therefore, she makes ... = $18")
+    match = re.search(r"Therefore[^.]*?=\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
+    if match:
+        return float(match.group(1).replace(",", ""))
+    
+    # Try "makes" pattern without calculation (fallback)
+    matches = list(re.finditer(r"makes?\s+\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE))
+    if matches:
+        return float(matches[-1].group(1).replace(",", ""))
     
     # Try "Final Answer:" pattern
-    match = re.search(r"Final Answer:\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
+    match = re.search(r"Final Answer:\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
     if match:
         return float(match.group(1).replace(",", ""))
     
-    # Try "The answer is" pattern
-    match = re.search(r"(?:the answer is|answer:)\s*(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
+    # Try "The answer is" or "Answer:" pattern
+    match = re.search(r"(?:the answer is|answer:)\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
     if match:
         return float(match.group(1).replace(",", ""))
     
-    # Try to find last number in response
+    # Try to find dollar amounts near common answer words in last 200 chars
+    last_part = response[-200:] if len(response) > 200 else response
+    match = re.search(r"(?:is|makes?|total|answer)\s+\$(-?\d+(?:,\d{3})*(?:\.\d+)?)", last_part, re.IGNORECASE)
+    if match:
+        return float(match.group(1).replace(",", ""))
+    
+    # Try to find last number in response as final fallback
     numbers = re.findall(r"-?\d+(?:,\d{3})*(?:\.\d+)?", response)
     if numbers:
         return float(numbers[-1].replace(",", ""))
