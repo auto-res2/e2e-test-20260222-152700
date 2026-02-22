@@ -1,46 +1,33 @@
 """Evaluation script to aggregate results and create comparison plots."""
 
-import argparse
+# [VALIDATOR FIX - Attempt 1]
+# [PROBLEM]: evaluate.py was being called with Hydra-style arguments (results_dir="..." run_ids='...') but the script used argparse which expects --results_dir and --run_ids
+# [CAUSE]: Mismatch between workflow calling convention (Hydra) and script argument parsing (argparse)
+# [FIX]: Changed from argparse to Hydra for consistency with other scripts (src/main.py) and to match workflow calling convention
+#
+# [OLD CODE]:
+# import argparse
+# def parse_args():
+#     parser = argparse.ArgumentParser(description="Evaluate experiment results")
+#     parser.add_argument("--results_dir", type=str, required=True, help="Results directory path")
+#     parser.add_argument("--run_ids", type=str, required=True, help="JSON string list of run IDs to evaluate")
+#     parser.add_argument("--wandb_entity", type=str, default="airas", help="WandB entity")
+#     parser.add_argument("--wandb_project", type=str, default="20260222-152700", help="WandB project")
+#     return parser.parse_args()
+#
+# [NEW CODE]:
 import json
 import os
 from pathlib import Path
 from typing import Dict, List
 
+import hydra
+from omegaconf import DictConfig
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import wandb
-
-
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Evaluate experiment results")
-    parser.add_argument(
-        "--results_dir",
-        type=str,
-        required=True,
-        help="Results directory path"
-    )
-    parser.add_argument(
-        "--run_ids",
-        type=str,
-        required=True,
-        help="JSON string list of run IDs to evaluate"
-    )
-    parser.add_argument(
-        "--wandb_entity",
-        type=str,
-        default="airas",
-        help="WandB entity"
-    )
-    parser.add_argument(
-        "--wandb_project",
-        type=str,
-        default="20260222-152700",
-        help="WandB project"
-    )
-    return parser.parse_args()
 
 
 def fetch_wandb_run(entity: str, project: str, run_id: str) -> Dict:
@@ -315,12 +302,26 @@ def create_per_run_plots(
     return generated_files
 
 
-def main():
+@hydra.main(version_base=None, config_path=None)
+def main(cfg: DictConfig):
     """Main evaluation function."""
-    args = parse_args()
+    # Extract parameters from config or use direct CLI overrides
+    # Note: We don't use config_path="../config" because evaluate.py doesn't need the run config,
+    # and the main config.yaml has run: ??? which is required and would fail
+    results_dir = Path(cfg.get("results_dir", ".research/results"))
     
-    results_dir = Path(args.results_dir)
-    run_ids = json.loads(args.run_ids)
+    # run_ids can be a string (JSON) or a list
+    run_ids_raw = cfg.get("run_ids")
+    if isinstance(run_ids_raw, str):
+        run_ids = json.loads(run_ids_raw)
+    elif isinstance(run_ids_raw, (list, tuple)):
+        run_ids = list(run_ids_raw)
+    else:
+        raise ValueError(f"run_ids must be a JSON string or list, got: {type(run_ids_raw)}")
+    
+    # Try to get from wandb config if available, otherwise use defaults
+    wandb_entity = cfg.get("wandb_entity", cfg.get("wandb", {}).get("entity", "airas"))
+    wandb_project = cfg.get("wandb_project", cfg.get("wandb", {}).get("project", "20260222-152700"))
     
     print(f"Evaluating runs: {run_ids}")
     print(f"Results directory: {results_dir}")
@@ -338,7 +339,7 @@ def main():
         if metrics is None:
             # Try to fetch from WandB
             print(f"  Attempting to fetch from WandB...")
-            wandb_data = fetch_wandb_run(args.wandb_entity, args.wandb_project, run_id)
+            wandb_data = fetch_wandb_run(wandb_entity, wandb_project, run_id)
             if wandb_data:
                 metrics = wandb_data["summary"]
         
