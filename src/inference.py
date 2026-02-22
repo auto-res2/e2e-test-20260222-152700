@@ -45,23 +45,23 @@ def create_til_rv_prompt(question: str) -> str:
     Returns:
         Formatted prompt
     """
-    # [VALIDATOR FIX - Attempt 3]
-    # [PROBLEM]: 68.5% catastrophic error rate; responses cut off at 257 tokens with Python code/explanations after FINAL
-    # [CAUSE]: Model still generates code blocks (```python...```) and long explanations after FINAL despite instructions.
-    #          The Llama instruction-tuned model is trained to be helpful with code examples, overriding brief prompts.
-    # [FIX]: Made prompt even more forceful with explicit prohibitions and end-of-response marker:
-    #        - Added "STOP after FINAL" instruction  
-    #        - Changed "No explanations, examples, or code" to "DO NOT write code, explanations, or examples"
-    #        - Added "Only output the required format" 
-    #        - Emphasized stopping immediately: "Output ONLY the above format and STOP"
-    #        - Combined with stop_sequences in generate() to truncate any extra output
+    # [VALIDATOR FIX - Attempt 4]
+    # [PROBLEM]: 80% catastrophic error rate; 193/200 responses hitting max 256 token limit
+    # [CAUSE]: The prompt template is too verbose for 256 token budget. The model needs to output:
+    #          LEDGER (5 lines) + SOLVE + VERIFY + PATCH + FINAL, but runs out of tokens mid-response.
+    #          This causes truncated/incomplete reasoning leading to wrong answers.
+    # [FIX]: Simplified prompt to be more concise while maintaining clarity:
+    #        - Removed repetitive examples and verbose instructions  
+    #        - Streamlined format description with minimal scaffolding
+    #        - Use direct "A=" instead of "Candidate A ="
+    #        - Condensed invariant format to essential elements only
+    #        - Removed "PATCH (if needed)" section entirely - just update A if needed
+    #        - This saves ~40-50 tokens, giving model adequate space to complete reasoning
     #
     # [OLD CODE]:
-    # return f"""Solve this math problem. BE CONCISE. No explanations, examples, or code.
+    # return f"""Solve: {question}
     # 
-    # Problem: {question}
-    # 
-    # Required format:
+    # DO NOT write code, explanations, or examples. Output ONLY the format below and STOP immediately after FINAL.
     # 
     # LEDGER (5 invariants, one line each):
     # 1. BOUND: <brief> | CHECK: <expr with A>
@@ -71,44 +71,35 @@ def create_til_rv_prompt(question: str) -> str:
     # 5. SANITY: <brief> | CHECK: <expr with A>
     # 
     # SOLVE:
-    # <concise calculation>
     # Candidate A = <number>
     # 
     # VERIFY:
-    # <check each invariant: PASS or FAIL>
     # PASSVEC: [bit1, bit2, bit3, bit4, bit5]
     # 
     # PATCH (if needed):
-    # <brief correction>
+    # <correction>
     # 
     # FINAL: <number>
     # 
-    # Begin:"""
+    # Answer:"""
     #
     # [NEW CODE]:
     return f"""Solve: {question}
 
-DO NOT write code, explanations, or examples. Output ONLY the format below and STOP immediately after FINAL.
+Output format (be concise):
 
-LEDGER (5 invariants, one line each):
-1. BOUND: <brief> | CHECK: <expr with A>
-2. SIGN_MONOTONE: <brief> | CHECK: <expr with A>
-3. DISCRETE: <brief> | CHECK: <expr with A>
-4. CONSERVATION: <brief> | CHECK: <expr with A>
-5. SANITY: <brief> | CHECK: <expr with A>
+CHECKS (5 constraints on A):
+1. BOUND: A constraint
+2. SIGN: A constraint  
+3. DISCRETE: A constraint
+4. CONSERVATION: A constraint
+5. SANITY: A estimate
 
-SOLVE:
-Candidate A = <number>
+SOLVE: A = <number>
 
-VERIFY:
-PASSVEC: [bit1, bit2, bit3, bit4, bit5]
+VERIFY: [0/1, 0/1, 0/1, 0/1, 0/1]
 
-PATCH (if needed):
-<correction>
-
-FINAL: <number>
-
-Answer:"""
+FINAL: <number>"""
 
 
 def run_inference(cfg: DictConfig) -> Dict:
