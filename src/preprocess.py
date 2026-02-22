@@ -98,17 +98,26 @@ def extract_final_answer_from_response(response: str) -> Optional[float]:
     Returns:
         Extracted numeric answer or None if not found
     """
-    # [VALIDATOR FIX - Attempt 1]
-    # [PROBLEM]: Answer extraction returns wrong numbers (e.g., 2.0 instead of 18.0, 4.0 instead of 64.0)
-    # [CAUSE]: Responses are truncated at max_new_tokens, and the function was extracting the last number in truncated text,
-    #          which is often a wrong intermediate number. Need to prioritize answer-like contexts.
-    # [FIX]: Added more answer patterns (makes, Therefore, she makes) and reordered to check answer-context patterns
-    #        before falling back to "last number" heuristic. Also look for dollar amounts with $ prefix.
+    # [VALIDATOR FIX - Attempt 2]
+    # [PROBLEM]: Answer extraction returns wrong numbers; model uses "## Step" format not TIL-RV format
+    # [CAUSE]: Model generates step-by-step CoT and gets truncated. Extraction needs to prioritize
+    #          explicit answer markers over intermediate calculation numbers.
+    # [FIX]: Reorder patterns to prioritize explicit answer markers first:
+    #        1. "The final answer is:" (new prompt format)
+    #        2. "FINAL:" and "####" (structured formats)
+    #        3. "The answer is" and similar explicit markers
+    #        4. Last number in response (only as final fallback)
+    #        This ensures we extract the intended final answer, not intermediate values.
     #
     # [OLD CODE]:
-    # (patterns in different order, missing key answer contexts)
+    # (patterns checking intermediate calculation numbers before explicit answer markers)
     #
     # [NEW CODE]:
+    
+    # Try "The final answer is:" pattern (new prompt format) - HIGHEST PRIORITY
+    match = re.search(r"(?:the final answer is|final answer is):\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
+    if match:
+        return float(match.group(1).replace(",", ""))
     
     # Try FINAL: pattern (TIL-RV format)
     match = re.search(r"FINAL:\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
@@ -117,6 +126,21 @@ def extract_final_answer_from_response(response: str) -> Optional[float]:
     
     # Try #### pattern (GSM8K format)
     match = re.search(r"####\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response)
+    if match:
+        return float(match.group(1).replace(",", ""))
+    
+    # Try "The answer is" or "Answer:" pattern
+    match = re.search(r"(?:the answer is|answer is|answer:)\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
+    if match:
+        return float(match.group(1).replace(",", ""))
+    
+    # Try "Final Answer:" pattern
+    match = re.search(r"Final Answer:\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
+    if match:
+        return float(match.group(1).replace(",", ""))
+    
+    # Try boxed answer pattern (LaTeX style: \boxed{123})
+    match = re.search(r"\\boxed\{(-?\d+(?:,\d{3})*(?:\.\d+)?)\}", response)
     if match:
         return float(match.group(1).replace(",", ""))
     
@@ -130,24 +154,9 @@ def extract_final_answer_from_response(response: str) -> Optional[float]:
     if match:
         return float(match.group(1).replace(",", ""))
     
-    # Try "makes" pattern without calculation (fallback)
-    matches = list(re.finditer(r"makes?\s+\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE))
-    if matches:
-        return float(matches[-1].group(1).replace(",", ""))
-    
-    # Try "Final Answer:" pattern
-    match = re.search(r"Final Answer:\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
-    if match:
-        return float(match.group(1).replace(",", ""))
-    
-    # Try "The answer is" or "Answer:" pattern
-    match = re.search(r"(?:the answer is|answer:)\s*\$?(-?\d+(?:,\d{3})*(?:\.\d+)?)", response, re.IGNORECASE)
-    if match:
-        return float(match.group(1).replace(",", ""))
-    
     # Try to find dollar amounts near common answer words in last 200 chars
     last_part = response[-200:] if len(response) > 200 else response
-    match = re.search(r"(?:is|makes?|total|answer)\s+\$(-?\d+(?:,\d{3})*(?:\.\d+)?)", last_part, re.IGNORECASE)
+    match = re.search(r"(?:is|makes?|total)\s+\$(-?\d+(?:,\d{3})*(?:\.\d+)?)", last_part, re.IGNORECASE)
     if match:
         return float(match.group(1).replace(",", ""))
     

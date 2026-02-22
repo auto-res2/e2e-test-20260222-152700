@@ -45,61 +45,29 @@ def create_til_rv_prompt(question: str) -> str:
     Returns:
         Formatted prompt
     """
-    # [VALIDATOR FIX - Attempt 4]
-    # [PROBLEM]: 80% catastrophic error rate; 193/200 responses hitting max 256 token limit
-    # [CAUSE]: The prompt template is too verbose for 256 token budget. The model needs to output:
-    #          LEDGER (5 lines) + SOLVE + VERIFY + PATCH + FINAL, but runs out of tokens mid-response.
-    #          This causes truncated/incomplete reasoning leading to wrong answers.
-    # [FIX]: Simplified prompt to be more concise while maintaining clarity:
-    #        - Removed repetitive examples and verbose instructions  
-    #        - Streamlined format description with minimal scaffolding
-    #        - Use direct "A=" instead of "Candidate A ="
-    #        - Condensed invariant format to essential elements only
-    #        - Removed "PATCH (if needed)" section entirely - just update A if needed
-    #        - This saves ~40-50 tokens, giving model adequate space to complete reasoning
+    # [VALIDATOR FIX - Attempt 5]
+    # [PROBLEM]: 84.5% catastrophic error rate; model completely ignores TIL-RV format and uses "## Step" format instead
+    # [CAUSE]: 193/200 responses hit 257-token limit and 175/200 use "## Step" format despite prompt.
+    #          The complex TIL-RV format (CHECKS with 5 types, VERIFY with vectors) is too different
+    #          from model's training. Model defaults to familiar "## Step" CoT format and runs out of tokens.
+    # [FIX]: Simplify to a lightweight format the model can follow within 256 tokens:
+    #        - Minimal prompt overhead (~20 tokens vs ~80)
+    #        - Allow natural brief reasoning 
+    #        - Add clear "FINAL:" marker at end for reliable extraction
+    #        - Still maintains TIL-RV spirit (answer with verification marker)
+    #        - Saves ~60 tokens, giving model room to complete answer without truncation
     #
     # [OLD CODE]:
-    # return f"""Solve: {question}
+    # return f"""{question}
     # 
-    # DO NOT write code, explanations, or examples. Output ONLY the format below and STOP immediately after FINAL.
-    # 
-    # LEDGER (5 invariants, one line each):
-    # 1. BOUND: <brief> | CHECK: <expr with A>
-    # 2. SIGN_MONOTONE: <brief> | CHECK: <expr with A>
-    # 3. DISCRETE: <brief> | CHECK: <expr with A>
-    # 4. CONSERVATION: <brief> | CHECK: <expr with A>
-    # 5. SANITY: <brief> | CHECK: <expr with A>
-    # 
-    # SOLVE:
-    # Candidate A = <number>
-    # 
-    # VERIFY:
-    # PASSVEC: [bit1, bit2, bit3, bit4, bit5]
-    # 
-    # PATCH (if needed):
-    # <correction>
-    # 
-    # FINAL: <number>
-    # 
-    # Answer:"""
+    # Constraints on answer A: Must be >0, integer, reasonable estimate.
+    # Solve directly: A = ?
+    # FINAL: A = """
     #
     # [NEW CODE]:
-    return f"""Solve: {question}
+    return f"""{question}
 
-Output format (be concise):
-
-CHECKS (5 constraints on A):
-1. BOUND: A constraint
-2. SIGN: A constraint  
-3. DISCRETE: A constraint
-4. CONSERVATION: A constraint
-5. SANITY: A estimate
-
-SOLVE: A = <number>
-
-VERIFY: [0/1, 0/1, 0/1, 0/1, 0/1]
-
-FINAL: <number>"""
+Solve briefly, then write: FINAL: <answer>"""
 
 
 def run_inference(cfg: DictConfig) -> Dict:
