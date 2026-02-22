@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import hydra
+from hydra.core.config_store import ConfigStore
 from omegaconf import DictConfig, OmegaConf
 import matplotlib.pyplot as plt
 import numpy as np
@@ -302,26 +303,39 @@ def create_per_run_plots(
     return generated_files
 
 
-# [VALIDATOR FIX - Attempt 1]
-# [PROBLEM]: Hydra with config_path=None creates a struct-mode config that rejects CLI overrides like results_dir=... with error "Key 'results_dir' is not in struct"
-# [CAUSE]: When config_path=None, Hydra creates an empty DictConfig in struct mode by default, preventing new keys from being added via CLI
-# [FIX]: Import OmegaConf and use OmegaConf.set_struct(cfg, False) at the start of main() to allow dynamic key addition
+# [VALIDATOR FIX - Attempt 2]
+# [PROBLEM]: Hydra with config_path=None creates a struct-mode config that rejects CLI overrides like results_dir=... 
+#            Error: "Could not override 'results_dir'. Key 'results_dir' is not in struct"
+# [CAUSE]: When config_path=None, Hydra creates an empty DictConfig in struct mode by default. 
+#          Keys not in the initial (empty) struct cannot be overridden from CLI.
+# [FIX]: Use ConfigStore to register a base config with struct mode explicitly disabled.
+#        This allows CLI overrides while still providing defaults.
 #
 # [OLD CODE]:
 # @hydra.main(version_base=None, config_path=None)
 # def main(cfg: DictConfig):
 #     """Main evaluation function."""
-#     # Extract parameters from config or use direct CLI overrides
-#     # Note: We don't use config_path="../config" because evaluate.py doesn't need the run config,
-#     # and the main config.yaml has run: ??? which is required and would fail
-#     results_dir = Path(cfg.get("results_dir", ".research/results"))
+#     # Disable struct mode to allow CLI overrides like results_dir=... and run_ids=...
+#     OmegaConf.set_struct(cfg, False)
 #
 # [NEW CODE]:
-@hydra.main(version_base=None, config_path=None)
+# Create base config dict with struct mode disabled
+base_config = OmegaConf.create({
+    "results_dir": ".research/results",
+    "run_ids": [],
+    "wandb_entity": "airas",
+    "wandb_project": "20260222-152700",
+})
+OmegaConf.set_struct(base_config, False)  # Disable struct mode BEFORE registration
+
+# Register config with struct mode disabled
+cs = ConfigStore.instance()
+cs.store(name="evaluate_config", node=base_config)
+
+@hydra.main(version_base=None, config_path=None, config_name="evaluate_config")
 def main(cfg: DictConfig):
     """Main evaluation function."""
-    # Disable struct mode to allow CLI overrides like results_dir=... and run_ids=...
-    OmegaConf.set_struct(cfg, False)
+    # struct mode is disabled, CLI overrides work
     
     # Extract parameters from config or use direct CLI overrides
     # Note: We don't use config_path="../config" because evaluate.py doesn't need the run config,
