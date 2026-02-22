@@ -1,0 +1,54 @@
+=== [VISUALIZATION] Start at Sun Feb 22 19:14:54 UTC 2026 ===
+Evaluating runs: ['comparative-0-long', 'comparative-0-strict', 'proposed-long', 'proposed-strict']
+Results directory: .research/results
+
+Processing comparative-0-long...
+Warning: Metrics file not found for comparative-0-long: .research/results/comparative-0-long/metrics.json
+  Attempting to fetch from WandB...
+  Exported metrics to: .research/results/comparative-0-long/metrics.json
+Generated: .research/results/comparative-0-long/comparative-0-long_metrics.pdf
+
+Processing comparative-0-strict...
+Warning: Metrics file not found for comparative-0-strict: .research/results/comparative-0-strict/metrics.json
+  Attempting to fetch from WandB...
+  Exported metrics to: .research/results/comparative-0-strict/metrics.json
+Generated: .research/results/comparative-0-strict/comparative-0-strict_metrics.pdf
+
+Processing proposed-long...
+Warning: Metrics file not found for proposed-long: .research/results/proposed-long/metrics.json
+  Attempting to fetch from WandB...
+  Exported metrics to: .research/results/proposed-long/metrics.json
+Generated: .research/results/proposed-long/proposed-long_metrics.pdf
+
+Processing proposed-strict...
+Warning: Metrics file not found for proposed-strict: .research/results/proposed-strict/metrics.json
+  Attempting to fetch from WandB...
+  Exported metrics to: .research/results/proposed-strict/metrics.json
+Generated: .research/results/proposed-strict/proposed-strict_metrics.pdf
+
+Creating aggregated metrics...
+Exported aggregated metrics to: .research/results/comparison/aggregated_metrics.json
+
+Creating comparison plots...
+Generated: .research/results/comparison/comparison_accuracy.pdf
+Generated: .research/results/comparison/comparison_tokens.pdf
+Generated: .research/results/comparison/comparison_catastrophic_errors.pdf
+Generated: .research/results/comparison/comparison_accuracy_vs_tokens.pdf
+
+================================================================================
+Evaluation complete!
+================================================================================
+
+Generated files:
+  - .research/results/comparison/aggregated_metrics.json
+  - .research/results/comparison/comparison_accuracy.pdf
+  - .research/results/comparison/comparison_tokens.pdf
+  - .research/results/comparison/comparison_catastrophic_errors.pdf
+  - .research/results/comparison/comparison_accuracy_vs_tokens.pdf
+
+Summary:
+  Primary metric: accuracy
+  Best proposed: proposed-strict (0.7400)
+  Best baseline: comparative-0-long (0.5050)
+  Gap: +0.2350
+=== [VISUALIZATION] PASSED at Sun Feb 22 19:15:03 UTC 2026 ===

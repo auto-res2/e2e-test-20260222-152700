@@ -1,0 +1,18 @@
+{
+  "accuracy": 0.74,
+  "avg_tokens_per_sample": 201.755,
+  "catastrophic_error_rate": 0.255,
+  "catastrophic_errors": 51,
+  "correct_count": 148,
+  "predictions_sample": {
+    "artifact_path": "wandb-client-artifact://09fbb5sp097szt1ju6ibzkthis6xhngqjf8pjwbe4zo3hgn3v54640wh3i2htsr3vjggsyzxwe7zlcipppswqn4bi39onjl1xowdfugiy7anq4shm4pjinrntz69ke6y/predictions_sample.table.json",
+    "log_mode": "IMMUTABLE",
+    "ncols": 6,
+    "nrows": 20,
+    "path": "media/table/predictions_sample_0_aebc0a7dc373377353be.table.json",
+    "sha256": "aebc0a7dc373377353be709cdd4375ab18bd541ff2bb5465216aa67bdb23ebf8",
+    "size": 2772
+  },
+  "total_samples": 200,
+  "total_tokens": 40351
+}
