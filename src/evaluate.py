@@ -390,11 +390,13 @@ def main(cfg: DictConfig):
         # Try to load from local files first
         metrics = load_local_metrics(results_dir, run_id)
         
-        # [VALIDATOR FIX - Attempt 4]
-        # [PROBLEM]: WandB SummarySubDict objects are not JSON serializable
-        # [CAUSE]: wandb_data["summary"] returns a SummarySubDict which is a dict-like object
-        #          but cannot be directly serialized to JSON
-        # [FIX]: Convert to plain dict using dict() constructor and filter out internal fields
+        # [VALIDATOR FIX - Attempt 5]
+        # [PROBLEM]: WandB SummarySubDict objects contain nested non-serializable values; 
+        #            JSON dump fails midway writing predictions_sample field, leaving incomplete file
+        # [CAUSE]: wandb_data["summary"] returns a SummarySubDict with nested dict-like objects
+        #          that aren't plain Python types. dict() only converts the top level.
+        # [FIX]: Use recursive converter to handle all nested structures; also use json.dumps
+        #        first to validate serializability before writing file
         #
         # [OLD CODE]:
         # if metrics is None:
@@ -402,7 +404,10 @@ def main(cfg: DictConfig):
         #     print(f"  Attempting to fetch from WandB...")
         #     wandb_data = fetch_wandb_run(wandb_entity, wandb_project, run_id)
         #     if wandb_data:
-        #         metrics = wandb_data["summary"]
+        #         # Convert SummarySubDict to plain dict and filter out internal WandB fields
+        #         summary = wandb_data["summary"]
+        #         metrics = {k: v for k, v in dict(summary).items() 
+        #                   if not k.startswith("_")}  # Remove internal fields like _wandb, _runtime, etc.
         # 
         # if metrics is None:
         #     print(f"  Warning: Could not find metrics for {run_id}, skipping...")
@@ -416,19 +421,37 @@ def main(cfg: DictConfig):
         # 
         # metrics_file = run_output_dir / "metrics.json"
         # with open(metrics_file, "w") as f:
-        #     json.dump(metrics, f, indent=2)
+        #     # Ensure metrics is JSON serializable by converting to plain dict
+        #     serializable_metrics = dict(metrics) if not isinstance(metrics, dict) else metrics
+        #     json.dump(serializable_metrics, f, indent=2)
         # print(f"  Exported metrics to: {metrics_file}")
         #
         # [NEW CODE]:
+        def make_json_serializable(obj):
+            """Recursively convert WandB objects to JSON-serializable types."""
+            if isinstance(obj, (str, int, float, bool, type(None))):
+                return obj
+            elif isinstance(obj, dict):
+                return {k: make_json_serializable(v) for k, v in obj.items() 
+                       if not k.startswith("_")}
+            elif isinstance(obj, (list, tuple)):
+                return [make_json_serializable(item) for item in obj]
+            else:
+                # For any other type (including WandB objects), try dict() then recurse
+                try:
+                    return make_json_serializable(dict(obj))
+                except (TypeError, ValueError):
+                    # If conversion fails, return string representation
+                    return str(obj)
+        
         if metrics is None:
             # Try to fetch from WandB
             print(f"  Attempting to fetch from WandB...")
             wandb_data = fetch_wandb_run(wandb_entity, wandb_project, run_id)
             if wandb_data:
-                # Convert SummarySubDict to plain dict and filter out internal WandB fields
+                # Convert SummarySubDict recursively to plain Python types
                 summary = wandb_data["summary"]
-                metrics = {k: v for k, v in dict(summary).items() 
-                          if not k.startswith("_")}  # Remove internal fields like _wandb, _runtime, etc.
+                metrics = make_json_serializable(summary)
         
         if metrics is None:
             print(f"  Warning: Could not find metrics for {run_id}, skipping...")
@@ -441,11 +464,19 @@ def main(cfg: DictConfig):
         run_output_dir.mkdir(parents=True, exist_ok=True)
         
         metrics_file = run_output_dir / "metrics.json"
-        with open(metrics_file, "w") as f:
-            # Ensure metrics is JSON serializable by converting to plain dict
-            serializable_metrics = dict(metrics) if not isinstance(metrics, dict) else metrics
-            json.dump(serializable_metrics, f, indent=2)
-        print(f"  Exported metrics to: {metrics_file}")
+        # Validate JSON serializability first by attempting to serialize to string
+        try:
+            json_str = json.dumps(metrics, indent=2)
+            with open(metrics_file, "w") as f:
+                f.write(json_str)
+            print(f"  Exported metrics to: {metrics_file}")
+        except (TypeError, ValueError) as e:
+            print(f"  Warning: Failed to serialize metrics for {run_id}: {e}")
+            # Write what we can
+            safe_metrics = make_json_serializable(metrics)
+            with open(metrics_file, "w") as f:
+                json.dump(safe_metrics, f, indent=2)
+            print(f"  Exported safe subset of metrics to: {metrics_file}")
         
         # Create per-run plots
         per_run_files = create_per_run_plots(run_id, metrics, run_output_dir)
