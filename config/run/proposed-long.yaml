@@ -9,7 +9,17 @@ method:
 model:
   name: meta-llama/Llama-3.1-8B-Instruct
   temperature: 0.0
-  max_new_tokens: 320
+  # [VALIDATOR FIX - Attempt 1]
+  # [PROBLEM]: Responses truncated at 320 tokens, preventing FINAL answer extraction
+  # [CAUSE]: TIL-RV format requires LEDGER (5 invariants) + SOLVE + VERIFY + optional PATCH + FINAL,
+  #          which needs more than 320 tokens to complete. All 10 samples hit exactly 321 tokens.
+  # [FIX]: Increased to 400 tokens to allow complete structured reasoning while maintaining length control
+  #
+  # [OLD CODE]:
+  # max_new_tokens: 320
+  #
+  # [NEW CODE]:
+  max_new_tokens: 400
   
 dataset:
   name: gsm8k
